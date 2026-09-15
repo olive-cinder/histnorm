@@ -1,0 +1,15 @@
+{
+  "name": "histnorm",
+  "version": "0.1.0",
+  "description": "Normalise bash, zsh and fish shell history into one clean format",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "license": "MIT",
+  "author": "olive-cinder",
+  "engines": {
+    "node": ">=18"
+  }
+}
