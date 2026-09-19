@@ -71,6 +71,8 @@ $ node dist/index.js ~/.zsh_history
 
 ## Status
 
-Early skeleton. Detection is per-line and format-specific; it does not yet
-handle zsh's multi-line command continuations or malformed/truncated
-history files gracefully. See the commit history for progress.
+Early skeleton. Detection is per-line and format-specific. zsh's multi-line
+command continuations (a trailing backslash before an embedded newline) are
+joined back into a single entry. No unit tests yet, and fish's history file
+is still handled by matching `- cmd:`/`when:` lines rather than parsing its
+actual structure. See the commit history for progress.

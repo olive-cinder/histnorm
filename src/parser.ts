@@ -25,16 +25,41 @@ export function parseHistory(input: string): HistoryEntry[] {
 
   let pendingBashTimestamp: number | null = null;
   let pendingFishCommand: string | null = null;
+  let pendingZsh: { timestamp: number; parts: string[] } | null = null;
 
   for (const line of lines) {
+    // Multi-line zsh commands are written with a trailing backslash before
+    // each embedded newline, so a continuation line is not itself a valid
+    // history line and must be captured before any of the other checks
+    // (including the blank-line skip below) get a chance to run on it.
+    if (pendingZsh !== null) {
+      const { text, continues } = splitZshContinuation(line);
+      pendingZsh.parts.push(text);
+      if (continues) {
+        continue;
+      }
+      entries.push({
+        command: pendingZsh.parts.join("\n").replace(/\s+$/, ""),
+        timestamp: pendingZsh.timestamp,
+        source: "zsh",
+      });
+      pendingZsh = null;
+      continue;
+    }
+
     if (line.trim() === "") {
       continue;
     }
 
     const zshMatch = line.match(ZSH_EXTENDED);
     if (zshMatch) {
+      const { text, continues } = splitZshContinuation(zshMatch[3] ?? "");
+      if (continues) {
+        pendingZsh = { timestamp: Number(zshMatch[1]), parts: [text] };
+        continue;
+      }
       entries.push({
-        command: unescapeZshCommand(zshMatch[3] ?? ""),
+        command: text.replace(/\s+$/, ""),
         timestamp: Number(zshMatch[1]),
         source: "zsh",
       });
@@ -80,6 +105,16 @@ export function parseHistory(input: string): HistoryEntry[] {
     entries.push({ command: pendingFishCommand, timestamp: null, source: "fish" });
   }
 
+  // An unterminated trailing backslash means the file was truncated
+  // mid-command; flush what we have rather than lose it.
+  if (pendingZsh !== null) {
+    entries.push({
+      command: pendingZsh.parts.join("\n").replace(/\s+$/, ""),
+      timestamp: pendingZsh.timestamp,
+      source: "zsh",
+    });
+  }
+
   return entries;
 }
 
@@ -87,10 +122,18 @@ function normaliseCommand(line: string): string {
   return line.replace(/\s+$/, "");
 }
 
-// zsh extended history escapes literal newlines in multi-line commands as
-// `\` followed by a real newline; by the time we get here that has already
-// been split into separate lines, so we only need to drop a trailing
-// backslash that would otherwise look like a stray line continuation.
-function unescapeZshCommand(command: string): string {
-  return command.replace(/\\$/, "").replace(/\s+$/, "");
+// zsh extended history escapes each embedded newline in a multi-line command
+// as a backslash immediately before the real newline. A doubled backslash at
+// the end of a line is a literal backslash in the command, not a
+// continuation marker, so continuation is only true on an odd run of
+// trailing backslashes.
+function splitZshContinuation(line: string): { text: string; continues: boolean } {
+  let count = 0;
+  while (count < line.length && line[line.length - 1 - count] === "\\") {
+    count++;
+  }
+  if (count % 2 === 1) {
+    return { text: line.slice(0, -1), continues: true };
+  }
+  return { text: line, continues: false };
 }
