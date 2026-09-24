@@ -5,7 +5,8 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "tsc && node --test dist/*.test.js"
   },
   "license": "MIT",
   "author": "olive-cinder",

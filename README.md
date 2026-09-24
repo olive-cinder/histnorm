@@ -73,6 +73,7 @@ $ node dist/index.js ~/.zsh_history
 
 Early skeleton. Detection is per-line and format-specific. zsh's multi-line
 command continuations (a trailing backslash before an embedded newline) are
-joined back into a single entry. No unit tests yet, and fish's history file
-is still handled by matching `- cmd:`/`when:` lines rather than parsing its
-actual structure. See the commit history for progress.
+joined back into a single entry. The parser has unit tests covering each
+format (`npm test`), but fish's history file is still handled by matching
+`- cmd:`/`when:` lines rather than parsing its actual structure. See the
+commit history for progress.
