@@ -24,7 +24,7 @@ export function parseHistory(input: string): HistoryEntry[] {
   const entries: HistoryEntry[] = [];
 
   let pendingBashTimestamp: number | null = null;
-  let pendingFishCommand: string | null = null;
+  let pendingFish: { command: string; timestamp: number | null } | null = null;
   let pendingZsh: { timestamp: number; parts: string[] } | null = null;
 
   for (const line of lines) {
@@ -51,6 +51,21 @@ export function parseHistory(input: string): HistoryEntry[] {
       continue;
     }
 
+    // A fish record is a `- cmd:` line plus the indented fields under it
+    // (`when:`, and `paths:` with its own nested `- ` items). Indented lines
+    // belong to the record; the first unindented line ends it.
+    if (pendingFish !== null) {
+      if (/^\s/.test(line)) {
+        const whenMatch = line.match(FISH_WHEN);
+        if (whenMatch) {
+          pendingFish.timestamp = Number(whenMatch[1]);
+        }
+        continue;
+      }
+      entries.push({ ...pendingFish, source: "fish" });
+      pendingFish = null;
+    }
+
     const zshMatch = line.match(ZSH_EXTENDED);
     if (zshMatch) {
       const { text, continues } = splitZshContinuation(zshMatch[3] ?? "");
@@ -74,22 +89,7 @@ export function parseHistory(input: string): HistoryEntry[] {
 
     const fishCmdMatch = line.match(FISH_CMD);
     if (fishCmdMatch) {
-      // flush an unterminated fish entry rather than lose it
-      if (pendingFishCommand !== null) {
-        entries.push({ command: pendingFishCommand, timestamp: null, source: "fish" });
-      }
-      pendingFishCommand = fishCmdMatch[1] ?? "";
-      continue;
-    }
-
-    const fishWhenMatch = line.match(FISH_WHEN);
-    if (fishWhenMatch && pendingFishCommand !== null) {
-      entries.push({
-        command: pendingFishCommand,
-        timestamp: Number(fishWhenMatch[1]),
-        source: "fish",
-      });
-      pendingFishCommand = null;
+      pendingFish = { command: unescapeFish(fishCmdMatch[1] ?? ""), timestamp: null };
       continue;
     }
 
@@ -101,8 +101,8 @@ export function parseHistory(input: string): HistoryEntry[] {
     pendingBashTimestamp = null;
   }
 
-  if (pendingFishCommand !== null) {
-    entries.push({ command: pendingFishCommand, timestamp: null, source: "fish" });
+  if (pendingFish !== null) {
+    entries.push({ ...pendingFish, source: "fish" });
   }
 
   // An unterminated trailing backslash means the file was truncated
@@ -116,6 +116,26 @@ export function parseHistory(input: string): HistoryEntry[] {
   }
 
   return entries;
+}
+
+// fish stores a command on one line, writing an embedded newline as `\n` and
+// a literal backslash as `\\`. Any other backslash pair is left alone.
+function unescapeFish(text: string): string {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (ch === "\\" && next === "n") {
+      out += "\n";
+      i++;
+    } else if (ch === "\\" && next === "\\") {
+      out += "\\";
+      i++;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
 }
 
 function normaliseCommand(line: string): string {

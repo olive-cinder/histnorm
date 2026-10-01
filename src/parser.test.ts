@@ -73,6 +73,37 @@ test("fish history: a trailing cmd with no when line is flushed at end of input"
   assert.deepEqual(entries, [{ command: "git status", timestamp: null, source: "fish" }]);
 });
 
+test("fish history: paths list under a record is not parsed as commands", () => {
+  const raw = [
+    "- cmd: vim notes.txt",
+    "  when: 1690000000",
+    "  paths:",
+    "    - notes.txt",
+    "    - /tmp/other",
+    "- cmd: ls",
+    "  when: 1690000050",
+  ].join("\n");
+  assert.deepEqual(parseHistory(raw), [
+    { command: "vim notes.txt", timestamp: 1690000000, source: "fish" },
+    { command: "ls", timestamp: 1690000050, source: "fish" },
+  ]);
+});
+
+test("fish history: \\n and \\\\ escapes in cmd are decoded", () => {
+  const entries = parseHistory("- cmd: echo a\\nb \\\\ c\n  when: 1690000000\n");
+  assert.deepEqual(entries, [
+    { command: "echo a\nb \\ c", timestamp: 1690000000, source: "fish" },
+  ]);
+});
+
+test("fish history: a record is ended by a following non-fish line", () => {
+  const entries = parseHistory("- cmd: ls\n  when: 1690000000\ncd /tmp\n");
+  assert.deepEqual(entries, [
+    { command: "ls", timestamp: 1690000000, source: "fish" },
+    { command: "cd /tmp", timestamp: null, source: "plain" },
+  ]);
+});
+
 test("blank lines are dropped", () => {
   const entries = parseHistory("\n\nls\n\n");
   assert.deepEqual(entries, [{ command: "ls", timestamp: null, source: "plain" }]);
